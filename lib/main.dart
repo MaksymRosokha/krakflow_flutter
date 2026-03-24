@@ -8,10 +8,30 @@ class MyApp extends StatelessWidget {
   MyApp({super.key});
 
   final List<Task> tasks = [
-    Task(title: "Write unit tests", deadline: "next week", done: true, priority:"important"),
-    Task(title: "Fix UI bugs", deadline: "today", done: false, priority:"not important"),
-    Task(title: "Prepare presentation", deadline: "Friday", done: false, priority:"very important"),
-    Task(title: "Review code", deadline: "this week", done: false, priority:"important"),
+    Task(
+      title: "Write unit tests",
+      deadline: "next week",
+      done: true,
+      priority: "high",
+    ),
+    Task(
+      title: "Fix UI bugs",
+      deadline: "today",
+      done: false,
+      priority: "average",
+    ),
+    Task(
+      title: "Prepare presentation",
+      deadline: "Friday",
+      done: false,
+      priority: "high",
+    ),
+    Task(
+      title: "Review code",
+      deadline: "this week",
+      done: false,
+      priority: "low",
+    ),
   ];
 
   @override
@@ -24,16 +44,26 @@ class MyApp extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  "Today you have ${tasks.length} tasks",
-                  style: TextStyle(fontSize: 24),
+                Padding(
+                  padding: EdgeInsets.only(left: 30),
+                  child: Text(
+                    "Today you have ${tasks.length} task(s)",
+                    style: TextStyle(fontSize: 24),
+                  ),
                 ),
-                SizedBox(height: 16),
+                Padding(
+                  padding: EdgeInsets.only(left: 30),
+                  child: Text(
+                    "You have done ${tasks.where((t) => t.done).toList().length} task(s)",
+                    style: TextStyle(fontSize: 20),
+                  ),
+                ),
+                SizedBox(height: 10),
                 Padding(
                   padding: EdgeInsets.all(16),
                   child: Center(
                     child: Text(
-                      "Today tasks:",
+                      "Today's tasks:",
                       style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
@@ -43,10 +73,21 @@ class MyApp extends StatelessWidget {
                 ),
               ],
             ),
-            TaskCard(
-              title: tasks[0].title,
-              subtitle: "Subtitle for TaskCard1",
-              icon: Icons.check,
+            ListView.builder(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              itemCount: tasks.length,
+              itemBuilder: (context, index) {
+                final task = tasks[index];
+                return TaskCard(
+                  title: task.title,
+                  subtitle:
+                      "deadline: ${task.deadline} | priority: ${task.priority}",
+                  icon: task.done
+                      ? Icons.check_circle
+                      : Icons.radio_button_unchecked,
+                );
+              },
             ),
           ],
         ),
@@ -86,9 +127,9 @@ class TaskCard extends StatelessWidget {
     return Card(
       child: ListTile(
         leading: Icon(icon),
-        title: Text(title),
+        title: Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Padding(
-          padding: EdgeInsets.only(left: 20),
+          padding: EdgeInsets.only(left: 10),
           child: Text(subtitle),
         ),
       ),
