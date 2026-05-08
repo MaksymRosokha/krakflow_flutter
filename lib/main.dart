@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'task_repository.dart';
+import '../models/task.dart';
+import '../services/task_api_service.dart';
 
 void main() {
   runApp(MyApp());
@@ -201,6 +203,7 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
+          TaskListScreen(),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -217,6 +220,50 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         child: Icon(Icons.add),
       ),
+    );
+  }
+}
+
+class TaskListScreen extends StatelessWidget {
+  const TaskListScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Task>>(
+      future: TaskApiService.fetchTasks(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Text("Error: ${snapshot.error}"),
+          );
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return Center(
+            child: Text("No tasks"),
+          );
+        }
+
+        final tasks = snapshot.data!;
+        return ListView(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
+          children: tasks.map((task) {
+            return TaskCard(
+              title: task.title,
+              subtitle: "deadline: ${task.deadline} | priority: ${task.priority}",
+              done: task.done,
+              onChanged: (value) {
+                  task.done = value!;
+              },
+            );
+          }).toList(),
+        );
+      },
     );
   }
 }
