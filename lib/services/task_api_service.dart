@@ -21,6 +21,7 @@ class TaskApiService {
         final priority = priorities[random.nextInt(priorities.length)];
         final deadline = deadlines[random.nextInt(deadlines.length)];
         return Task(
+          id: todo["id"],
           title: todo["todo"],
           deadline: deadline,
           done: todo["completed"],

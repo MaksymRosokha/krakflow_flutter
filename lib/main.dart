@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
 import 'task_repository.dart';
+import 'package:hive_ce_flutter/hive_flutter.dart';
+
 import '../models/task.dart';
 import '../services/task_api_service.dart';
+import '../services/task_local_database.dart';
+import '../services/task_sync_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Hive.initFlutter();
+  await Hive.openBox("tasks");
+
   runApp(MyApp());
 }
 
@@ -224,13 +233,70 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class TaskListScreen extends StatelessWidget {
-  const TaskListScreen({super.key});
+// class TaskListScreen extends StatelessWidget {
+//   const TaskListScreen({super.key});
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return FutureBuilder<List<Task>>(
+//       future: TaskApiService.fetchTasks(),
+//       builder: (context, snapshot) {
+//         if (snapshot.connectionState == ConnectionState.waiting) {
+//           return const Center(
+//             child: CircularProgressIndicator(),
+//           );
+//         }
+//         if (snapshot.hasError) {
+//           return Center(
+//             child: Text("Error: ${snapshot.error}"),
+//           );
+//         }
+//         if (!snapshot.hasData || snapshot.data!.isEmpty) {
+//           return Center(
+//             child: Text("No tasks"),
+//           );
+//         }
+//
+//         final tasks = snapshot.data!;
+//         return ListView(
+//           shrinkWrap: true,
+//           physics: NeverScrollableScrollPhysics(),
+//           children: tasks.map((task) {
+//             return TaskCard(
+//               title: task.title,
+//               subtitle: "deadline: ${task.deadline} | priority: ${task.priority}",
+//               done: task.done,
+//               onChanged: (value) {
+//                   task.done = value!;
+//               },
+//             );
+//           }).toList(),
+//         );
+//       },
+//     );
+//   }
+// }
 
+class TaskListScreen extends StatefulWidget {
+  const TaskListScreen({super.key});
+  @override
+  State<TaskListScreen> createState() => _TaskListScreenState();
+}
+class _TaskListScreenState extends State<TaskListScreen> {
+  late Future<List<Task>> tasksFuture;
+  @override
+  void initState() {
+    super.initState();
+    tasksFuture = loadTasks();
+  }
+  Future<List<Task>> loadTasks() async {
+    await TaskSyncService.loadInitialDataIfNeeded();
+    return TaskLocalDatabase.getTasks();
+  }
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Task>>(
-      future: TaskApiService.fetchTasks(),
+      future: tasksFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -239,29 +305,26 @@ class TaskListScreen extends StatelessWidget {
         }
         if (snapshot.hasError) {
           return Center(
-            child: Text("Error: ${snapshot.error}"),
+            child: Text("Błąd: ${snapshot.error}"),
           );
         }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Center(
-            child: Text("No tasks"),
-          );
-        }
-
-        final tasks = snapshot.data!;
-        return ListView(
-          shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(),
-          children: tasks.map((task) {
+        final tasks = snapshot.data ?? [];
+        return ListView.builder(
+          itemCount: tasks.length,
+          itemBuilder: (context, index) {
+            final task = tasks[index];
             return TaskCard(
-              title: task.title,
-              subtitle: "deadline: ${task.deadline} | priority: ${task.priority}",
-              done: task.done,
-              onChanged: (value) {
-                  task.done = value!;
-              },
+                title: task.title,
+                subtitle: "termin: ${task.deadline} | priorytet: ${task.priority}",
+                done: task.done,
+                onChanged: (value) {
+// zmiana checkboxa
+            },
+            onTap: () {
+// edycja zadania
+            },
             );
-          }).toList(),
+          },
         );
       },
     );
@@ -360,6 +423,7 @@ class AddTaskScreen extends StatelessWidget {
             ElevatedButton(
               onPressed: () {
                 final newTask = Task(
+                  id: 0,
                   title: titleController.text,
                   deadline: deadlineController.text,
                   done: done,
