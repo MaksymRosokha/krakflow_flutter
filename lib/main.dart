@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'task_repository.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 
 import '../models/task.dart';
-import '../services/task_api_service.dart';
 import '../services/task_local_database.dart';
 import '../services/task_sync_service.dart';
 
@@ -12,6 +10,8 @@ void main() async {
 
   await Hive.initFlutter();
   await Hive.openBox("tasks");
+
+  TaskIdGenerator.init(TaskLocalDatabase.getTasks());
 
   runApp(MyApp());
 }
@@ -35,17 +35,20 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String filter = "all";
   String selectedFilter = "all";
+  int allTasksCount = 0;
+  int doneTasksCount = 0;
+
+  int refreshKey = 0; // Licznik odświeżeń
+
+  void updateCounters(List<Task> tasks) {
+    setState(() {
+      allTasksCount = tasks.length;
+      doneTasksCount = tasks.where((task) => task.done).length;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    List<Task> filteredTasks = TaskRepository.tasks;
-    if (selectedFilter == "done") {
-      filteredTasks = TaskRepository.tasks.where((task) => task.done).toList();
-    } else if (selectedFilter == "active") {
-      filteredTasks = TaskRepository.tasks.where((task) => !task.done).toList();
-    } else if (selectedFilter == "all") {
-      filteredTasks = TaskRepository.tasks;
-    }
     return Scaffold(
       appBar: AppBar(
         title: Text("KrakFlow"),
@@ -58,24 +61,25 @@ class _HomeScreenState extends State<HomeScreen> {
                 builder: (context) {
                   return AlertDialog(
                     title: Text("Confirmation"),
-                    content: Text(
-                      "Are you sure you want to delete all tasks?",
-                    ),
+                    content: Text("Are you sure you want to delete all tasks?"),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),
                         child: Text("Cancel"),
                       ),
                       TextButton(
-                        onPressed: () {
+                        onPressed: () async {
+                          await TaskLocalDatabase.deleteAllTasks();
                           setState(() {
-                            TaskRepository.tasks.clear();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text("All the tasks were deleted!"),
-                              ),
-                            );
+                            refreshKey++;
                           });
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text("All the tasks were deleted!"),
+                            ),
+                          );
+
                           Navigator.pop(context);
                         },
                         child: Text("Delete"),
@@ -96,14 +100,14 @@ class _HomeScreenState extends State<HomeScreen> {
               Padding(
                 padding: EdgeInsets.only(left: 30),
                 child: Text(
-                  "Today you have ${TaskRepository.tasks.length} task(s)",
+                  "Today you have $allTasksCount task(s)",
                   style: TextStyle(fontSize: 24),
                 ),
               ),
               Padding(
                 padding: EdgeInsets.only(left: 30),
                 child: Text(
-                  "You have done ${TaskRepository.tasks.where((t) => t.done).toList().length} task(s)",
+                  "You have done $doneTasksCount task(s)",
                   style: TextStyle(fontSize: 20),
                 ),
               ),
@@ -168,51 +172,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          ListView.builder(
-            shrinkWrap: true,
-            physics: NeverScrollableScrollPhysics(),
-            itemCount: filteredTasks.length,
-            itemBuilder: (context, index) {
-              final task = filteredTasks[index];
-              return Dismissible(
-                key: ValueKey(task.title),
-                direction: DismissDirection.endToStart,
-                onDismissed: (direction) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text("Task \"${task.title}\" was deleted!"),
-                    ),
-                  );
-                  TaskRepository.tasks.remove(task);
-                },
-                child: TaskCard(
-                  title: task.title,
-                  subtitle:
-                      "deadline: ${task.deadline} | priority: ${task.priority}",
-                  done: task.done,
-                  onChanged: (value) {
-                    setState(() {
-                      task.done = value!;
-                    });
-                  },
-                  onTap: () async {
-                    final Task? updatedTask = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => EditTaskScreen(task: task),
-                      ),
-                    );
-                    if (updatedTask != null) {
-                      setState(() {
-                        TaskRepository.tasks[index] = updatedTask;
-                      });
-                    }
-                  },
-                ),
-              );
-            },
+          TaskListScreen(
+            key: ValueKey(refreshKey),
+            selectedFilter: selectedFilter,
+            onTasksLoaded: updateCounters,
           ),
-          TaskListScreen(),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -222,8 +186,9 @@ class _HomeScreenState extends State<HomeScreen> {
             MaterialPageRoute(builder: (context) => AddTaskScreen()),
           );
           if (newTask != null) {
+            await TaskLocalDatabase.addTask(newTask);
             setState(() {
-              TaskRepository.tasks.add(newTask);
+              refreshKey++;
             });
           }
         },
@@ -233,96 +198,117 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// class TaskListScreen extends StatelessWidget {
-//   const TaskListScreen({super.key});
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return FutureBuilder<List<Task>>(
-//       future: TaskApiService.fetchTasks(),
-//       builder: (context, snapshot) {
-//         if (snapshot.connectionState == ConnectionState.waiting) {
-//           return const Center(
-//             child: CircularProgressIndicator(),
-//           );
-//         }
-//         if (snapshot.hasError) {
-//           return Center(
-//             child: Text("Error: ${snapshot.error}"),
-//           );
-//         }
-//         if (!snapshot.hasData || snapshot.data!.isEmpty) {
-//           return Center(
-//             child: Text("No tasks"),
-//           );
-//         }
-//
-//         final tasks = snapshot.data!;
-//         return ListView(
-//           shrinkWrap: true,
-//           physics: NeverScrollableScrollPhysics(),
-//           children: tasks.map((task) {
-//             return TaskCard(
-//               title: task.title,
-//               subtitle: "deadline: ${task.deadline} | priority: ${task.priority}",
-//               done: task.done,
-//               onChanged: (value) {
-//                   task.done = value!;
-//               },
-//             );
-//           }).toList(),
-//         );
-//       },
-//     );
-//   }
-// }
-
 class TaskListScreen extends StatefulWidget {
-  const TaskListScreen({super.key});
+  final String selectedFilter;
+  final ValueChanged<List<Task>> onTasksLoaded;
+
+  const TaskListScreen({
+    super.key,
+    required this.selectedFilter,
+    required this.onTasksLoaded,
+  });
+
   @override
   State<TaskListScreen> createState() => _TaskListScreenState();
 }
+
 class _TaskListScreenState extends State<TaskListScreen> {
   late Future<List<Task>> tasksFuture;
+
   @override
   void initState() {
     super.initState();
     tasksFuture = loadTasks();
   }
+
   Future<List<Task>> loadTasks() async {
     await TaskSyncService.loadInitialDataIfNeeded();
     return TaskLocalDatabase.getTasks();
   }
+
+  Future<void> addTask(Task task) async {
+    await TaskLocalDatabase.addTask(task);
+    await loadTasks();
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Task>>(
       future: tasksFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
+          return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
-          return Center(
-            child: Text("Błąd: ${snapshot.error}"),
-          );
+          return Center(child: Text("Error: ${snapshot.error}"));
         }
-        final tasks = snapshot.data ?? [];
+        List<Task> tasks = snapshot.data ?? [];
+
+        if (widget.selectedFilter == "done") {
+          tasks = tasks.where((task) => task.done).toList();
+        } else if (widget.selectedFilter == "active") {
+          tasks = tasks.where((task) => !task.done).toList();
+        }
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          widget.onTasksLoaded(tasks);
+        });
+
         return ListView.builder(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
           itemCount: tasks.length,
           itemBuilder: (context, index) {
             final task = tasks[index];
-            return TaskCard(
+            return Dismissible(
+              key: ValueKey(task.id),
+              direction: DismissDirection.endToStart,
+
+              onDismissed: (direction) async {
+                setState(() {
+                  tasks.removeAt(index);
+                });
+
+                TaskLocalDatabase.deleteTask(task.id);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Task "${task.title}" was deleted!')),
+                );
+              },
+
+              child: TaskCard(
                 title: task.title,
-                subtitle: "termin: ${task.deadline} | priorytet: ${task.priority}",
+                subtitle:
+                    "deadline: ${task.deadline} | priority: ${task.priority}",
                 done: task.done,
-                onChanged: (value) {
-// zmiana checkboxa
-            },
-            onTap: () {
-// edycja zadania
-            },
+                onChanged: (value) async {
+                  final updatedTask = Task(
+                    id: task.id,
+                    title: task.title,
+                    deadline: task.deadline,
+                    priority: task.priority,
+                    done: value ?? false,
+                  );
+                  await TaskLocalDatabase.updateTask(updatedTask);
+                  setState(() {
+                    tasksFuture = loadTasks();
+                  });
+                },
+                onTap: () async {
+                  final Task? updatedTask = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => EditTaskScreen(task: task),
+                    ),
+                  );
+                  if (updatedTask != null) {
+                    await TaskLocalDatabase.updateTask(updatedTask);
+                    setState(() {
+                      tasksFuture = loadTasks();
+                    });
+                  }
+                },
+              ),
             );
           },
         );
@@ -423,7 +409,7 @@ class AddTaskScreen extends StatelessWidget {
             ElevatedButton(
               onPressed: () {
                 final newTask = Task(
-                  id: 0,
+                  id: TaskIdGenerator.nextId(),
                   title: titleController.text,
                   deadline: deadlineController.text,
                   done: done,
@@ -499,5 +485,22 @@ class EditTaskScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class TaskIdGenerator {
+  static int _lastId = 0;
+
+  static void init(List<Task> tasks) {
+    if (tasks.isEmpty) {
+      _lastId = 0;
+    } else {
+      _lastId = tasks.map((t) => t.id).reduce((a, b) => a > b ? a : b);
+    }
+  }
+
+  static int nextId() {
+    _lastId++;
+    return _lastId;
   }
 }
