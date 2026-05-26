@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/task.dart';
-import 'dart:math';
+import 'dart:math' hide log;
+import 'dart:developer';
 
 final random = Random();
 final priorities = ["low", "average", "high"];
@@ -16,6 +17,9 @@ class TaskApiService {
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       final List todos = data["todos"];
+      log("From $baseUrl/todos", name: "task_api_service");
+      log("Response: ${response.statusCode}", name: "task_api_service");
+      log("Downloaded ${todos.length} tasks", name: "task_api_service");
 
       return todos.map((todo) {
         final priority = priorities[random.nextInt(priorities.length)];
@@ -29,6 +33,9 @@ class TaskApiService {
         );
       }).toList();
     } else {
+      log("From $baseUrl/todos", name: "task_api_service");
+      log("Response: ${response.statusCode}", name: "task_api_service");
+      log("An error occurred");
       throw Exception("Data collection error");
     }
   }
